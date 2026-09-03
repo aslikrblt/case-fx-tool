@@ -8,7 +8,8 @@ import httpx
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.upstream import fetch_rates, get_http_client
+from app.cache import get_rates
+from app.upstream import get_http_client
 from app.validation import ErrorCode, validate_request
 
 app = FastAPI(title="fx-tool")
@@ -41,7 +42,7 @@ async def convert(
     asked_date = date or dt.date.today()
 
     try:
-        payload, rate_date = await fetch_rates(client, base_currency, target_currency, on=date)
+        payload, rate_date = await get_rates(client, base_currency, target_currency, on=date)
         rate = payload["rates"][target_currency]
     except httpx.TimeoutException:
         return JSONResponse(

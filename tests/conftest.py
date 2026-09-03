@@ -14,8 +14,17 @@ from typing import AsyncIterator, Callable
 import httpx
 import pytest
 
+from app import cache
 from app.main import app
 from app.upstream import get_http_client
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_cache():
+    """Every test starts with an empty cache — it's process-global state."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 def default_fake_upstream_handler(request: httpx.Request) -> httpx.Response:
