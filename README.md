@@ -35,9 +35,13 @@ which returns:
 
 ```json
 {
-  "amount": 250, "from": "EUR", "to": "TRY",
-  "rate": 47.1234, "result": 11780.85,
-  "rate_date": "2026-08-28", "asked_date": "2026-08-28",
+  "amount": 250, 
+  "from": "EUR", 
+  "to": "TRY",
+  "rate": 47.1234, 
+  "result": 11780.85,
+  "rate_date": "2026-08-28", 
+  "asked_date": "2026-08-28",
   "source": "ECB via frankfurter.dev"
 }
 ```
