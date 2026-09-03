@@ -10,6 +10,35 @@ The service is intentionally narrow: no auth, no database, no UI — one endpoin
 that answers reliably, including for the historical/weekend/holiday/error edge
 cases covered in [Behavior by scenario](#behavior-by-scenario) below.
 
+## Layout
+
+```
+.
+├── app/
+│   ├── main.py           # FastAPI app, the /tools/convert endpoint itself
+│   ├── config.py         # reads PORT / FX_UPSTREAM_BASE from the environment
+│   ├── upstream.py       # Frankfurter client — HTTP client is injectable, so
+│   │                     #   tests never touch the real network
+│   ├── cache.py          # in-process rate cache, keyed by (from, to, date)
+│   ├── validation.py     # request validation + the ErrorCode registry
+│   └── __init__.py
+├── tests/
+│   ├── conftest.py                       # fake-upstream fixtures, api_client
+│   ├── test_convert.py                   # happy path + weekend/holiday fallback
+│   ├── test_convert_validation.py        # invalid amount/currency/date input
+│   ├── test_convert_upstream_failures.py # upstream timeout/500/invalid JSON
+│   └── test_cache.py                     # cache hit/miss behavior
+├── run.sh             # starts the service
+├── test.sh            # runs the test suite (network-free)
+├── requirements.txt
+├── pytest.ini
+└── README.md          # this file
+```
+
+`tool.py`, `REVIEW.md`, and `NOTES.md` also live at the repo root, but they're
+not part of this service — they're separate deliverables for the case's Part B
+(code review) and notes.
+
 ## Run
 
 `run.sh` starts the service with Uvicorn, listening on `$PORT`:
