@@ -1,21 +1,37 @@
 # fx-tool
 
-A small HTTP service an AI agent can call as a tool to convert an amount
-between two currencies using ECB reference rates (via [Frankfurter](https://frankfurter.dev)).
+A small HTTP service meant to be called as a tool by an AI agent — for example,
+when a customer asks something like "how much is 250 EUR in TRY". It exposes a
+single endpoint, `GET /tools/convert`, which converts an amount between two
+currencies using official European Central Bank reference rates, retrieved from
+the [Frankfurter](https://frankfurter.dev) API (no key or signup required).
+
+The service is intentionally narrow: no auth, no database, no UI — one endpoint
+that answers reliably, including for the historical/weekend/holiday/error edge
+cases covered in [Behavior by scenario](#behavior-by-scenario) below.
 
 ## Run
+
+`run.sh` starts the service with Uvicorn, listening on `$PORT`:
 
 ```bash
 PORT=8080 FX_UPSTREAM_BASE=https://api.frankfurter.dev ./run.sh
 ```
 
-- `PORT` — port to listen on. Default `8080`.
-- `FX_UPSTREAM_BASE` — upstream root URL. Default `https://api.frankfurter.dev`. Point it
-  at a fake upstream to run without the real API.
+- `PORT` — the port the server listens on. Defaults to `8080` if not set.
+- `FX_UPSTREAM_BASE` — the root URL of the upstream exchange-rate API the
+  service talks to. Defaults to the real Frankfurter API. Point it at a
+  different host (e.g. a local stand-in) to run against a fake upstream
+  instead of the real one — nothing in the code hardcodes the real host, so
+  this always takes effect.
+
+Once it's running, call the endpoint directly:
 
 ```bash
 curl "http://localhost:8080/tools/convert?amount=250&from=EUR&to=TRY&date=2026-08-28"
 ```
+
+which returns:
 
 ```json
 {
@@ -26,7 +42,10 @@ curl "http://localhost:8080/tools/convert?amount=250&from=EUR&to=TRY&date=2026-0
 }
 ```
 
-`date` is optional; omit it for the latest published rate.
+`date` is optional; omit it for the latest published rate. `rate_date` is the
+date the returned rate actually belongs to, as reported by the upstream;
+`asked_date` is what was requested — they can differ, see
+[Behavior by scenario](#behavior-by-scenario).
 
 ## Test
 
@@ -34,11 +53,13 @@ curl "http://localhost:8080/tools/convert?amount=250&from=EUR&to=TRY&date=2026-0
 ./test.sh
 ```
 
-- Runs `pytest`.
-- **Fully network-free**: the upstream is replaced with an `httpx.MockTransport`
-  fake via a FastAPI dependency override (see `tests/conftest.py`), and `test.sh`
-  itself defaults `FX_UPSTREAM_BASE` to a closed port so even a bare `./test.sh`
-  never touches the network.
+Runs the full `pytest` suite. The suite is **fully network-free**:
+`tests/conftest.py` replaces the real upstream HTTP client with a fake one
+backed by `httpx.MockTransport`, wired in through a FastAPI dependency
+override, so no test ever makes a real network call. `test.sh` itself also
+defaults `FX_UPSTREAM_BASE` to a closed port before running, so even a bare
+`./test.sh` with no environment configured can't accidentally reach the real
+API.
 
 ## Error codes
 
@@ -60,19 +81,16 @@ Every non-2xx response is `{"error": "<code>", "message": "<sentence>"}`.
 
 ## Behavior by scenario
 
-- **Weekend / public holiday** (no rate published for the asked date): the upstream's
-  own fallback to the last published rate is used as-is. `rate_date` is read from
-  what the upstream actually returned, `asked_date` stays what was asked — they're
-  shown as two separate fields, never merged or hidden.
-- **Future date**: rejected before any upstream call, `date_in_future`.
-- **Date before 1999-01-04**: rejected before any upstream call, `date_before_series_start`.
-- **Unknown or invalid currency code** (`from` and/or `to`): rejected before any
-  upstream call, `unknown_currency`.
-- **`from` equals `to`**: rejected before any upstream call, `same_currency`.
-- **Upstream is slow, errors, or returns a broken body**: no rate is ever invented
-  and nothing is reported as 200 — `upstream_timeout`, `upstream_error`, or
-  `upstream_invalid_response`, matching what actually failed.
-- **Invalid `amount`** (missing, zero, negative, or more than 4 decimal places):
-  rejected before any upstream call, with the matching `amount_*` code.
-- **Repeat request** for the same `(from, to, resolved date)`: served from an
-  in-process cache, no second upstream call.
+| Scenario | Status | What happens |
+|---|---|---|
+| Weekend / public holiday — no rate published for the asked date | 200 | The upstream's own fallback to the last published rate is used as-is. `rate_date` reflects what the upstream actually returned; `asked_date` stays what was asked — the two are always separate fields, never merged or hidden. |
+| Malformed query parameters (e.g. `amount=abc`, an unparsable `date`, `from`/`to` missing entirely) | 400 `invalid_request` | Rejected with the same `{error, message}` shape as every other rejection, instead of FastAPI's default validation error format. |
+| Future date | 400 `date_in_future` | Rejected before any upstream call. |
+| Date before `1999-01-04` (series start) | 400 `date_before_series_start` | Rejected before any upstream call. |
+| Unknown or invalid currency code (`from` and/or `to`) | 400 `unknown_currency` | Rejected before any upstream call. |
+| `from` equals `to` | 400 `same_currency` | Rejected before any upstream call. |
+| Invalid `amount` (missing, zero, negative, or more than 4 decimal places) | 400 `amount_*` | Rejected before any upstream call, with the matching error code. |
+| Upstream is slow | 504 `upstream_timeout` | No rate is ever invented, and nothing is ever reported as 200. |
+| Upstream errors or is unreachable | 502 `upstream_error` | Same principle: no invented rate, no false 200. |
+| Upstream returns a broken/invalid body | 502 `upstream_invalid_response` | Same principle: no invented rate, no false 200. |
+| Repeat request for the same `(from, to, resolved date)` | 200 | Served from an in-process cache — no second upstream call. |
