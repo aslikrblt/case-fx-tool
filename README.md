@@ -114,6 +114,9 @@ Every non-2xx response is `{"error": "<code>", "message": "<sentence>"}`.
 
 ## Behavior by scenario
 
+Every input and upstream condition called out in the case brief, and exactly
+how the service responds to each one:
+
 | Scenario | Status | What happens |
 |---|---|---|
 | Weekend / public holiday — no rate published for the asked date | 200 | The upstream's own fallback to the last published rate is used as-is. `rate_date` reflects what the upstream actually returned; `asked_date` stays what was asked — the two are always separate fields, never merged or hidden. |
