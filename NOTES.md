@@ -48,3 +48,23 @@ checked actual behavior (running the tests, and a couple of times booting a
 real fake upstream server end to end) before moving to the next.
 
 ## One thing the AI got wrong
+
+`/tools/convert` declares `amount`, `date`, `from`, and `to` as typed FastAPI
+`Query` parameters, so FastAPI/Pydantic parses and validates them before the
+request ever reaches `app/validation.py`. A non-numeric `amount`, a malformed
+`date`, or a missing `from`/`to` never reaches my own validation code at
+all — it falls straight into FastAPI's own automatic 422 response, shaped
+like `{"detail": [...]}`, not the `{"error", "message"}` schema every other
+rejection in this service uses and that the README promises for *every*
+non-2xx response. Claude Code had built solid validation for every case
+explicitly listed in the brief (bad amount, unknown currency, same currency,
+out-of-range date) but never checked what happens when FastAPI's own type
+coercion runs before that validation gets a chance to. I noticed it by
+testing the service against its own stated contract rather than against the
+brief's scenario list: `?amount=abc&from=EUR&to=TRY` doesn't come back in
+the documented shape. I added a global handler for `RequestValidationError`
+that maps it onto the same `{"error": "invalid_request", "message": "..."}`
+shape, added the new code to `validation.py`'s `ErrorCode` registry and to
+the README's error table, and added tests covering a non-numeric amount, an
+invalid date string, and a missing `from` parameter (commit: "fix: return
+consistent error schema for malformed query params").
