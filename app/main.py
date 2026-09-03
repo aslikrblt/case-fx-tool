@@ -6,6 +6,7 @@ import datetime as dt
 
 import httpx
 from fastapi import Depends, FastAPI, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.cache import get_rates
@@ -13,6 +14,25 @@ from app.upstream import get_http_client
 from app.validation import ErrorCode, validate_request
 
 app = FastAPI(title="fx-tool")
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_request_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Replace FastAPI's default {"detail": [...]} body with our own schema.
+
+    This is what fires when a query param fails type coercion before our own
+    validation ever runs — amount=abc, an unparsable date, or from/to missing
+    entirely.
+    """
+    bad_params = dict.fromkeys(str(error["loc"][-1]) for error in exc.errors() if error.get("loc"))
+    params_list = ", ".join(bad_params) if bad_params else "request"
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": ErrorCode.INVALID_REQUEST,
+            "message": f"Invalid or missing parameter(s): {params_list}.",
+        },
+    )
 
 
 @app.get("/tools/convert")

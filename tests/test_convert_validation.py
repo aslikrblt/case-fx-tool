@@ -111,3 +111,41 @@ async def test_convert_rejects_amount_with_too_many_decimal_places(api_client: h
         "error": "amount_too_precise",
         "message": "amount may have at most 4 decimal places.",
     }
+
+
+async def test_convert_rejects_non_numeric_amount(api_client: httpx.AsyncClient) -> None:
+    """amount fails FastAPI's own type coercion before validate_request runs —
+    must still come back in our error schema, not FastAPI's {"detail": [...]}."""
+    response = await api_client.get(
+        "/tools/convert",
+        params={"amount": "abc", "from": "EUR", "to": "TRY"},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "invalid_request"
+    assert "amount" in body["message"]
+
+
+async def test_convert_rejects_malformed_date(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.get(
+        "/tools/convert",
+        params={"amount": 100, "from": "EUR", "to": "TRY", "date": "gecersiz-tarih"},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "invalid_request"
+    assert "date" in body["message"]
+
+
+async def test_convert_rejects_request_missing_from_param(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.get(
+        "/tools/convert",
+        params={"amount": 100, "to": "TRY"},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "invalid_request"
+    assert "from" in body["message"]

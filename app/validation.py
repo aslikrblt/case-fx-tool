@@ -47,6 +47,7 @@ class ErrorCode:
     UPSTREAM_TIMEOUT = "upstream_timeout"
     UPSTREAM_ERROR = "upstream_error"
     UPSTREAM_INVALID_RESPONSE = "upstream_invalid_response"
+    INVALID_REQUEST = "invalid_request"
 
 
 @dataclass(frozen=True)

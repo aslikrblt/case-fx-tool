@@ -46,6 +46,7 @@ Every non-2xx response is `{"error": "<code>", "message": "<sentence>"}`.
 
 | Code | HTTP status | Returned when |
 |---|---|---|
+| `invalid_request` | 400 | a query parameter fails basic parsing (e.g. `amount=abc`, an unparsable `date`, `from`/`to` missing entirely) |
 | `amount_missing` | 400 | `amount` was not provided |
 | `amount_not_positive` | 400 | `amount` is zero, negative, or not a finite number |
 | `amount_too_precise` | 400 | `amount` has more than 4 decimal places |
