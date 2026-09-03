@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.upstream import fetch_rates, get_http_client
-from app.validation import validate_request
+from app.validation import ErrorCode, validate_request
 
 app = FastAPI(title="fx-tool")
 
@@ -40,8 +40,48 @@ async def convert(
     target_currency = to.upper()
     asked_date = date or dt.date.today()
 
-    payload, rate_date = await fetch_rates(client, base_currency, target_currency, on=date)
-    rate = payload["rates"][target_currency]
+    try:
+        payload, rate_date = await fetch_rates(client, base_currency, target_currency, on=date)
+        rate = payload["rates"][target_currency]
+    except httpx.TimeoutException:
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error": ErrorCode.UPSTREAM_TIMEOUT,
+                "message": "The upstream exchange-rate service timed out. Please try again.",
+            },
+        )
+    except httpx.HTTPStatusError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": ErrorCode.UPSTREAM_ERROR,
+                "message": (
+                    "The upstream exchange-rate service returned an error "
+                    f"(HTTP {exc.response.status_code})."
+                ),
+            },
+        )
+    except (ValueError, KeyError):
+        # response.json() failing (non-JSON body) is a ValueError; a JSON
+        # body missing "date"/"rates" (or the target currency within it)
+        # is a KeyError. Either way, the body can't be trusted.
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": ErrorCode.UPSTREAM_INVALID_RESPONSE,
+                "message": "The upstream exchange-rate service returned an unreadable response.",
+            },
+        )
+    except httpx.HTTPError:
+        # Any other transport-level failure (connection refused, DNS, ...).
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": ErrorCode.UPSTREAM_ERROR,
+                "message": "The upstream exchange-rate service is unavailable.",
+            },
+        )
 
     return {
         "amount": amount,

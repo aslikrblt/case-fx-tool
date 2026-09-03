@@ -1,10 +1,12 @@
-"""Request-input validation for /tools/convert.
+"""Request-input validation for /tools/convert, and its error code registry.
 
-Runs before the upstream is ever called, so a bad request never spends a
-network round trip (or a cache slot) on something we could already tell was
-wrong. Every rejection maps onto the service's error schema —
-{"error": "<code>", "message": "<sentence>"} — and every code the endpoint
-can return is collected in ErrorCode so there is exactly one place to look.
+validate_request runs before the upstream is ever called, so a bad request
+never spends a network round trip (or a cache slot) on something we could
+already tell was wrong. Every rejection — from validation here, or from an
+upstream failure handled in app/main.py — maps onto the service's error
+schema, {"error": "<code>", "message": "<sentence>"}, and every code the
+endpoint can return is collected in ErrorCode so there is exactly one place
+to look.
 """
 
 from __future__ import annotations
@@ -42,6 +44,9 @@ class ErrorCode:
     AMOUNT_MISSING = "amount_missing"
     AMOUNT_NOT_POSITIVE = "amount_not_positive"
     AMOUNT_TOO_PRECISE = "amount_too_precise"
+    UPSTREAM_TIMEOUT = "upstream_timeout"
+    UPSTREAM_ERROR = "upstream_error"
+    UPSTREAM_INVALID_RESPONSE = "upstream_invalid_response"
 
 
 @dataclass(frozen=True)
